@@ -9,6 +9,7 @@
 #endif
 
 #include "app/cmd/replace_image.h"
+#include "app/cmd/set_layer_flags.h"
 #include "app/cmd/set_palette.h"
 #include "app/commands/command.h"
 #include "app/context.h"
@@ -331,6 +332,7 @@ void PaletteFromReferenceCommand::onExecute(Context* context)
   auto* precision = new Slider(3, 8, g_options.precision);
   auto* cumulative = new CheckBox(Strings::palette_from_reference_cumulative());
   auto* remap = new CheckBox(Strings::palette_from_reference_remap());
+  auto* refColors = new CheckBox(Strings::palette_from_reference_show_palette_colors());
   auto* info = new Label("");
   auto* buttons = new Box(HORIZONTAL | HOMOGENEOUS);
   auto* ok = new Button(Strings::general_ok());
@@ -341,6 +343,23 @@ void PaletteFromReferenceCommand::onExecute(Context* context)
   cumulative->setSelected(g_cumulative);
   remap->setSelected(g_remap);
   remap->setVisible(sprite->pixelFormat() == IMAGE_INDEXED);
+
+  // Show the reference image with its own colors or with the new
+  // palette colors (changes the layer flag live, it's restored or
+  // committed at the end).
+  Layer* refLayer = refCel->layer();
+  const LayerFlags origRefFlags = refLayer->flags();
+  auto refFlags = [origRefFlags](const bool paletteColors) {
+    return (paletteColors ? LayerFlags(int(origRefFlags) | int(LayerFlags::RefPaletteColors)) :
+                            LayerFlags(int(origRefFlags) & ~int(LayerFlags::RefPaletteColors)));
+  };
+  refColors->setSelected(refLayer->hasFlags(LayerFlags::RefPaletteColors));
+  refColors->Click.connect([&] {
+    refLayer->setFlags(refFlags(refColors->isSelected()));
+    refCel->incrementVersion();
+    doc->notifyGeneralUpdate();
+    update_screen_for_document(doc);
+  });
   ok->setMinSize(gfx::Size(60 * ui::guiscale(), 0));
   ok->Click.connect([&window, ok] { window.closeWindow(ok); });
   cancel->Click.connect([&window, cancel] { window.closeWindow(cancel); });
@@ -356,6 +375,7 @@ void PaletteFromReferenceCommand::onExecute(Context* context)
   addRow(Strings::palette_from_reference_precision(), precision);
   grid->addChildInCell(cumulative, 2, 1, LEFT);
   grid->addChildInCell(remap, 2, 1, LEFT);
+  grid->addChildInCell(refColors, 2, 1, LEFT);
   grid->addChildInCell(info, 2, 1, LEFT);
   buttons->addChild(ok);
   buttons->addChild(cancel);
@@ -414,6 +434,8 @@ void PaletteFromReferenceCommand::onExecute(Context* context)
   if (accepted)
     readOptions();
 
+  const bool newRefPaletteColors = refColors->isSelected();
+  refLayer->setFlags(origRefFlags);
   preview.restore();
 
   if (accepted) {
@@ -424,6 +446,8 @@ void PaletteFromReferenceCommand::onExecute(Context* context)
     ContextWriter writer(context);
     Tx tx(writer, friendlyName());
     preview.commit(tx, pal, g_remap && sprite->pixelFormat() == IMAGE_INDEXED);
+    if (newRefPaletteColors != refLayer->hasFlags(LayerFlags::RefPaletteColors))
+      tx(new cmd::SetLayerFlags(refLayer, refFlags(newRefPaletteColors)));
     tx.commit();
 
     set_current_palette(sprite->palette(frame), false);

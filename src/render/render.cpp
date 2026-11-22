@@ -1373,10 +1373,11 @@ void Render::renderCel(Image* dst_image,
         return;
     }
 
-    // Show the reference with the sprite palette colors.
-    const bool paletteColors = (m_sprite && m_sprite->pixelFormat() != IMAGE_RGB &&
-                                cel_image->pixelFormat() != IMAGE_INDEXED &&
-                                cel_image->pixelFormat() != m_sprite->pixelFormat() &&
+    // Show the reference with the sprite palette colors (in RGB
+    // sprites the nearest palette colors are used too).
+    const bool paletteColors = (m_sprite && cel_image->pixelFormat() != IMAGE_INDEXED &&
+                                (m_sprite->pixelFormat() == IMAGE_RGB ||
+                                 cel_image->pixelFormat() != m_sprite->pixelFormat()) &&
                                 cel->layer()->hasFlags(LayerFlags::RefPaletteColors));
 
     if (cel->data()->hasQuad() || paletteColors) {
@@ -1471,9 +1472,14 @@ void Render::renderQuadImage(Image* dst_image,
   }
   if (paletteFrame >= 0 && m_sprite && tmp->pixelFormat() == IMAGE_RGB) {
     const Palette* spritePal = m_sprite->palette(paletteFrame);
-    const RgbMap* rgbmap = (m_sprite->pixelFormat() == IMAGE_INDEXED ?
-                              m_sprite->rgbMap(paletteFrame) :
-                              nullptr);
+    // In RGB sprites every palette entry is a usable color (only
+    // fully transparent entries are skipped).
+    const RgbMap* rgbmap =
+      (m_sprite->pixelFormat() == IMAGE_INDEXED ?
+         m_sprite->rgbMap(paletteFrame) :
+       m_sprite->pixelFormat() == IMAGE_RGB ?
+         m_sprite->rgbMap(paletteFrame, Sprite::RgbMapFor::OpaqueLayer) :
+         nullptr);
     for (int y = 0; y < tmp->height(); ++y) {
       auto* d = (RgbTraits::address_t)tmp->getPixelAddress(0, y);
       for (int x = 0; x < tmp->width(); ++x, ++d) {
