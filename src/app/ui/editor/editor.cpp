@@ -45,6 +45,7 @@
 #include "app/ui/editor/moving_pixels_state.h"
 #include "app/ui/editor/pixels_movement.h"
 #include "app/ui/editor/play_state.h"
+#include "app/ui/editor/ref_cel_handles.h"
 #include "app/ui/editor/scrolling_state.h"
 #include "app/ui/editor/standby_state.h"
 #include "app/ui/editor/zooming_state.h"
@@ -385,6 +386,9 @@ void Editor::setLayer(const Layer* layer)
   if (isActive())
     UIContext::instance()->notifyBeforeActiveSiteChanged();
 
+  // Reference layer handles (drawn by the decorator) of the old layer
+  const doc::Cel* oldRefCel = get_transformable_ref_cel(this);
+
   m_observers.notifyBeforeLayerChanged(this);
 
   // Remove extra cel information if we change between different layer
@@ -419,6 +423,10 @@ void Editor::setLayer(const Layer* layer)
     }
   }
 
+  // Show/hide the on-canvas handles of reference layers
+  if (oldRefCel != get_transformable_ref_cel(this))
+    invalidate();
+
   // The active layer has changed.
   if (isActive())
     UIContext::instance()->notifyActiveSiteChanged();
@@ -445,8 +453,12 @@ void Editor::setFrame(frame_t frame)
   if (isActive())
     UIContext::instance()->notifyActiveSiteChanged();
 
-  // Invalidate canvas area
-  invalidateCanvas();
+  // Invalidate canvas area (and the whole editor if there are
+  // reference layer handles, which can be outside the canvas)
+  if (m_layer && m_layer->isReference())
+    invalidate();
+  else
+    invalidateCanvas();
   updateStatusBar();
 }
 
@@ -2516,6 +2528,12 @@ void Editor::onInvalidateRegion(const gfx::Region& region)
 void Editor::onActiveToolChange(tools::Tool* tool)
 {
   m_state->onActiveToolChange(this, tool);
+
+  // Show/hide the on-canvas handles of reference layers (they are
+  // visible only with the Move tool)
+  if (m_layer && m_layer->isReference())
+    invalidate();
+
   if (hasMouse()) {
     updateStatusBar();
     setCursor(mousePosInDisplay());
