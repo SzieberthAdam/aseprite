@@ -22,6 +22,11 @@ if(UPDATE_VERSION_WITH_GIT)
   endif()
 endif()
 
+# Explicit version for custom releases (e.g. -DASEPRITE_VERSION=1.3.18.6-reftransform)
+if(ASEPRITE_VERSION)
+  set(VERSION "${ASEPRITE_VERSION}")
+endif()
+
 configure_file(
   "${CMAKE_CURRENT_SOURCE_DIR}/generated_version.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/generated_version.h")
