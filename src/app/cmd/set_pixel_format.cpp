@@ -102,6 +102,27 @@ SetPixelFormat::SetPixelFormat(Sprite* sprite,
     if (cel->layer()->isTilemap())
       continue;
 
+    // Reference layers keep their original RGB image in any color
+    // mode (they are displayed in the sprite palette colors only if
+    // the layer is configured to do so). Indexed reference images
+    // depend on the sprite palette, so they are converted to RGB.
+    if (cel->layer()->isReference()) {
+      ImageRef oldImage = cel->imageRef();
+      if (oldImage && oldImage->pixelFormat() == IMAGE_INDEXED) {
+        ImageRef newImage(render::convert_pixel_format(oldImage.get(),
+                                                       nullptr,
+                                                       IMAGE_RGB,
+                                                       dithering,
+                                                       nullptr,
+                                                       sprite->palette(cel->frame()),
+                                                       false,
+                                                       0));
+        m_pre.add(new cmd::ReplaceImage(sprite, oldImage, newImage));
+      }
+      superDel.nextImage();
+      continue;
+    }
+
     ImageRef oldImage = cel->imageRef();
     convertImage(sprite,
                  dithering,

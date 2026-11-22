@@ -184,6 +184,12 @@ bool AsepriteDecoder::decode()
             break;
           }
 
+          case ASE_FILE_CHUNK_REFERENCE_IMAGE: {
+            if (last_cel && last_cel->layer() && last_cel->layer()->isReference())
+              readReferenceImageChunk(last_cel, &header, chunk_end);
+            break;
+          }
+
           case ASE_FILE_CHUNK_COLOR_PROFILE: {
             readColorProfile(sprite.get());
             break;
@@ -1029,6 +1035,43 @@ void AsepriteDecoder::readCelExtraChunk(Cel* cel)
     }
     cel->data()->setQuad(quad);
   }
+}
+
+void AsepriteDecoder::readReferenceImageChunk(Cel* cel,
+                                                 const AsepriteHeader* header,
+                                                 const size_t chunk_end)
+{
+  read32(); // Flags (reserved)
+  const int depth = read16();
+  read16(); // Reserved
+  const int w = read32();
+  const int h = read32();
+  readPadding(16);
+
+  if (w <= 0 || h <= 0 || w > 0xffff || h > 0xffff)
+    return;
+
+  const PixelFormat pixelFormat = (depth == 32 ? IMAGE_RGB :
+                                   depth == 16 ? IMAGE_GRAYSCALE :
+                                   depth == 8  ? IMAGE_INDEXED :
+                                                 IMAGE_TILEMAP);
+  if (pixelFormat == IMAGE_TILEMAP)
+    return;
+
+  const ImageRef image(Image::create(pixelFormat, w, h));
+  if (!image)
+    return;
+  read_compressed_image(f(), delegate(), image.get(), header, chunk_end);
+
+  // Replace the converted image keeping the precise bounds/quad
+  const bool hasQuad = cel->data()->hasQuad();
+  const doc::Quad quad = cel->data()->quad();
+  const gfx::RectF bounds = cel->boundsF();
+  cel->data()->setImage(image, cel->layer());
+  if (hasQuad)
+    cel->data()->setQuad(quad);
+  else
+    cel->setBoundsF(bounds);
 }
 
 void AsepriteDecoder::readColorProfile(Sprite* sprite)

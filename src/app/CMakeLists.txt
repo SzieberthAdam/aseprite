@@ -463,6 +463,7 @@ target_sources(app-lib PRIVATE
   commands/cmd_remove_frame.cpp
   commands/cmd_remove_frame_tag.cpp
   commands/cmd_remove_layer.cpp
+  commands/cmd_palette_from_reference.cpp
   commands/cmd_reference_layer.cpp
   commands/cmd_remove_slice.cpp
   commands/cmd_reopen_closed_file.cpp
@@ -719,6 +720,7 @@ target_sources(app-lib PRIVATE
   util/buffer_region.cpp
   util/cel_ops.cpp
   util/clipboard.cpp
+  util/color_clustering.cpp
   util/clipboard_native.cpp
   util/conversion_to_image.cpp
   util/conversion_to_surface.cpp

@@ -362,8 +362,26 @@ void NewLayerCommand::onExecute(Context* context)
 
         frame_t dstFrame = writer.frame() + fr;
 
-        if (sprite->pixelFormat() != pasteSpr->pixelFormat() ||
-            sprite->pixelFormat() == IMAGE_INDEXED) {
+        // Reference layers keep the color mode of the original image
+        // (indexed images are converted to RGB, as their palette is
+        // not the sprite palette).
+        if (layer->isReference()) {
+          if (pasteImage->pixelFormat() == IMAGE_INDEXED) {
+            ImageRef pasteImageConv(
+              render::convert_pixel_format(pasteImage.get(),
+                                           nullptr,
+                                           IMAGE_RGB,
+                                           render::Dithering(),
+                                           nullptr,
+                                           pasteSpr->palette(fr),
+                                           (pasteSpr->backgroundLayer() ? true : false),
+                                           0));
+            if (pasteImageConv)
+              pasteImage = pasteImageConv;
+          }
+        }
+        else if (sprite->pixelFormat() != pasteSpr->pixelFormat() ||
+                 sprite->pixelFormat() == IMAGE_INDEXED) {
           ImageRef pasteImageConv(
             render::convert_pixel_format(pasteImage.get(),
                                          nullptr,

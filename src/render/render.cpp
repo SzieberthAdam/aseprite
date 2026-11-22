@@ -21,6 +21,8 @@
 #include "doc/primitives_fast.h"
 #include "doc/quad.h"
 #include "doc/render_plan.h"
+#include "doc/rgbmap.h"
+#include "doc/sprite.h"
 #include "doc/tileset.h"
 #include "doc/tilesets.h"
 #include "gfx/clip.h"
@@ -1356,15 +1358,38 @@ void Render::renderCel(Image* dst_image,
       }
     }
   }
-  else if (cel && cel->layer() && cel->layer()->isReference() && cel->data()->hasQuad()) {
-    renderQuadImage(dst_image,
-                    cel_image,
-                    pal,
-                    cel->data()->quad(),
-                    area,
-                    compositeImage,
-                    opacity,
-                    blendMode);
+  else if (cel && cel->layer() && cel->layer()->isReference()) {
+    // Reference images can be stored in RGB even when the sprite is
+    // indexed/grayscale (to keep the original colors of the photo).
+    CompositeImageFunc refComposite = compositeImage;
+    if (!m_sprite || cel_image->pixelFormat() != m_sprite->pixelFormat()) {
+      refComposite = getImageComposition(dst_image->pixelFormat(), cel_image->pixelFormat(), nullptr);
+      if (!refComposite)
+        return;
+    }
+
+    // Show the reference with the sprite palette colors.
+    const bool paletteColors = (m_sprite && m_sprite->pixelFormat() != IMAGE_RGB &&
+                                cel_image->pixelFormat() != IMAGE_INDEXED &&
+                                cel_image->pixelFormat() != m_sprite->pixelFormat() &&
+                                cel->layer()->hasFlags(LayerFlags::RefPaletteColors));
+
+    if (cel->data()->hasQuad() || paletteColors) {
+      renderQuadImage(dst_image,
+                      cel_image,
+                      pal,
+                      (celBounds == cel->boundsF() ?
+                         cel->data()->quad() :
+                         cel->data()->quad().mapRect(cel->boundsF(), celBounds)),
+                      area,
+                      refComposite,
+                      opacity,
+                      blendMode,
+                      paletteColors ? cel->frame() : -1);
+    }
+    else {
+      renderImage(dst_image, cel_image, pal, celBounds, area, refComposite, opacity, blendMode);
+    }
   }
   else {
     renderImage(dst_image, cel_image, pal, celBounds, area, compositeImage, opacity, blendMode);
@@ -1378,7 +1403,8 @@ void Render::renderQuadImage(Image* dst_image,
                              const gfx::Clip& area,
                              CompositeImageFunc compositeImage,
                              const int opacity,
-                             const BlendMode blendMode)
+                             const BlendMode blendMode,
+                             const frame_t paletteFrame)
 {
   if (!quad.isConvex() || cel_image->width() < 1 || cel_image->height() < 1)
     return;
@@ -1418,6 +1444,52 @@ void Render::renderQuadImage(Image* dst_image,
       sample_quad_image<IndexedTraits>(tmp.get(), cel_image, inv, rc.x, rc.y);
       break;
     default: return;
+  }
+
+  // Map the sampled colors to the nearest colors of the sprite palette
+  // (keeping the alpha channel of the reference image).
+  if (paletteFrame >= 0 && m_sprite && tmp->pixelFormat() == IMAGE_GRAYSCALE) {
+    ImageRef rgbTmp(Image::create(IMAGE_RGB, tmp->width(), tmp->height()));
+    for (int y = 0; y < tmp->height(); ++y) {
+      for (int x = 0; x < tmp->width(); ++x) {
+        const color_t c = get_pixel_fast<GrayscaleTraits>(tmp.get(), x, y);
+        const int v = graya_getv(c);
+        put_pixel_fast<RgbTraits>(rgbTmp.get(), x, y, rgba(v, v, v, graya_geta(c)));
+      }
+    }
+    tmp = rgbTmp;
+    compositeImage = getImageComposition(dst_image->pixelFormat(), IMAGE_RGB, nullptr);
+    if (!compositeImage)
+      return;
+  }
+  if (paletteFrame >= 0 && m_sprite && tmp->pixelFormat() == IMAGE_RGB) {
+    const Palette* spritePal = m_sprite->palette(paletteFrame);
+    const RgbMap* rgbmap = (m_sprite->pixelFormat() == IMAGE_INDEXED ?
+                              m_sprite->rgbMap(paletteFrame) :
+                              nullptr);
+    for (int y = 0; y < tmp->height(); ++y) {
+      auto* d = (RgbTraits::address_t)tmp->getPixelAddress(0, y);
+      for (int x = 0; x < tmp->width(); ++x, ++d) {
+        const color_t c = *d;
+        const int a = rgba_geta(c);
+        if (a == 0)
+          continue;
+        const int r = rgba_getr(c);
+        const int g = rgba_getg(c);
+        const int b = rgba_getb(c);
+        if (rgbmap && spritePal) {
+          const int i = rgbmap->mapColor(r, g, b, 255);
+          if (i >= 0 && i < spritePal->size()) {
+            const color_t pc = spritePal->getEntry(i);
+            *d = rgba(rgba_getr(pc), rgba_getg(pc), rgba_getb(pc), a);
+          }
+        }
+        else {
+          const int v = rgba_luma(c);
+          *d = rgba(v, v, v, a);
+        }
+      }
+    }
   }
 
   compositeImage(dst_image,

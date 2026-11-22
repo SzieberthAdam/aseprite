@@ -25,6 +25,7 @@
 #include "zlib.h"
 
 #include <deque>
+#include <unordered_map>
 
 #define ASEFILE_TRACE(...) // TRACE(__VA_ARGS__)
 
@@ -284,8 +285,15 @@ layer_t AsepriteEncoder::writeCels(AsepriteFrameHeader* frame_header,
     if (cel) {
       writeCelChunk(frame_header, cel, static_cast<const LayerImage*>(layer), layer_index);
 
-      if (layer->isReference())
+      if (layer->isReference()) {
         writeCelExtraChunk(frame_header, cel);
+
+        // Reference images keep their own color mode
+        if (!cel->link() && cel->image() &&
+            cel->image()->pixelFormat() != sprite->pixelFormat()) {
+          writeReferenceImageChunk(frame_header, cel);
+        }
+      }
 
       if (!cel->link() && !cel->data()->userData().isEmpty()) {
         writeUserDataChunk(frame_header, ext_files, &cel->data()->userData());
@@ -634,6 +642,55 @@ void write_compressed_image(FileInterface* f,
   }
 }
 
+// Converts an image of a reference cel (which can be RGB in a
+// non-RGB sprite) to the sprite pixel format, so the cel chunk can be
+// read by any Aseprite version.
+ImageRef convert_cel_image_for_sprite(const Image* image, const Sprite* sprite, const frame_t frame)
+{
+  const PixelFormat fmt = sprite->pixelFormat();
+  ImageRef dst(Image::create(fmt, image->width(), image->height()));
+  const Palette* pal = sprite->palette(frame);
+  const int maskIndex = sprite->transparentColor();
+  std::unordered_map<color_t, int> cache;
+
+  for (int y = 0; y < image->height(); ++y) {
+    for (int x = 0; x < image->width(); ++x) {
+      color_t c = get_pixel(image, x, y);
+      switch (image->pixelFormat()) {
+        case IMAGE_GRAYSCALE:
+          c = rgba(graya_getv(c), graya_getv(c), graya_getv(c), graya_geta(c));
+          break;
+        case IMAGE_INDEXED:
+          c = (int(c) == image->maskColor() ? 0 : pal->getEntry(c));
+          break;
+      }
+      const int a = rgba_geta(c);
+      switch (fmt) {
+        case IMAGE_RGB: put_pixel(dst.get(), x, y, c); break;
+        case IMAGE_GRAYSCALE:
+          put_pixel(dst.get(), x, y, graya(rgba_luma(c), a));
+          break;
+        case IMAGE_INDEXED: {
+          int i = maskIndex;
+          if (a >= 128) {
+            auto it = cache.find(c);
+            if (it != cache.end()) {
+              i = it->second;
+            }
+            else {
+              i = pal->findBestfit(rgba_getr(c), rgba_getg(c), rgba_getb(c), 255, maskIndex);
+              cache[c] = i;
+            }
+          }
+          put_pixel(dst.get(), x, y, i);
+          break;
+        }
+      }
+    }
+  }
+  return dst;
+}
+
 } // anonymous namespace
 
 //////////////////////////////////////////////////////////////////////
@@ -666,6 +723,17 @@ void AsepriteEncoder::writeCelChunk(AsepriteFrameHeader* frame_header,
                         cel->layer()->isTilemap() ? delegate()->preferredTilemapCelType() :
                                                     delegate()->preferredCelType());
 
+  // Reference images in other pixel format than the sprite are saved
+  // converted in the cel chunk (the original image is saved in a
+  // ASE_FILE_CHUNK_REFERENCE_IMAGE chunk).
+  const Image* image = cel->image();
+  ImageRef convertedImage;
+  if (image && image->pixelFormat() != IMAGE_TILEMAP &&
+      image->pixelFormat() != cel->sprite()->pixelFormat()) {
+    convertedImage = convert_cel_image_for_sprite(image, cel->sprite(), cel->frame());
+    image = convertedImage.get();
+  }
+
   write16(layer_index);
   write16(cel->x());
   write16(cel->y());
@@ -676,8 +744,6 @@ void AsepriteEncoder::writeCelChunk(AsepriteFrameHeader* frame_header,
 
   switch (cel_type) {
     case ASE_FILE_RAW_CEL: {
-      const Image* image = cel->image();
-
       if (image) {
         // Width and height
         write16(image->width());
@@ -707,7 +773,6 @@ void AsepriteEncoder::writeCelChunk(AsepriteFrameHeader* frame_header,
       break;
 
     case ASE_FILE_COMPRESSED_CEL: {
-      const Image* image = cel->image();
       ASSERT(image);
       if (image) {
         // Width and height
@@ -771,6 +836,27 @@ void AsepriteEncoder::writeCelExtraChunk(AsepriteFrameHeader* frame_header, cons
       write32(fixmath::ftofix(quad[i].y));
     }
   }
+}
+
+void AsepriteEncoder::writeReferenceImageChunk(AsepriteFrameHeader* frame_header,
+                                                  const Cel* cel)
+{
+  const ChunkWriter chunk(this, frame_header, ASE_FILE_CHUNK_REFERENCE_IMAGE);
+
+  const Image* image = cel->image();
+  ASSERT(image);
+
+  write32(0); // Flags (reserved)
+  write16(image->pixelFormat() == IMAGE_RGB       ? 32 :
+          image->pixelFormat() == IMAGE_GRAYSCALE ? 16 :
+                                                    8);
+  write16(0); // Reserved
+  write32(image->width());
+  write32(image->height());
+  writePadding(16);
+
+  ImageScanlines scan(image);
+  write_compressed_image(f(), &scan, image->pixelFormat());
 }
 
 void AsepriteEncoder::writeColorProfile(AsepriteFrameHeader* frame_header, const Sprite* sprite)

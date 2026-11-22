@@ -9,6 +9,7 @@
 #endif
 
 #include "app/cmd/set_cel_quad.h"
+#include "app/cmd/set_layer_flags.h"
 #include "app/commands/command.h"
 #include "app/context_access.h"
 #include "app/doc.h"
@@ -263,6 +264,55 @@ protected:
 Command* CommandFactory::createResetReferenceTransformCommand()
 {
   return new ResetReferenceTransformCommand;
+}
+
+//////////////////////////////////////////////////////////////////////
+// ReferencePaletteColors: switches the active reference layer between
+// its original colors and the sprite palette colors (for indexed and
+// grayscale sprites).
+
+class ReferencePaletteColorsCommand : public Command {
+public:
+  ReferencePaletteColorsCommand() : Command(CommandId::ReferencePaletteColors()) {}
+
+protected:
+  bool onEnabled(Context* context) override
+  {
+    if (!context->checkFlags(ContextFlags::ActiveDocumentIsWritable | ContextFlags::HasActiveLayer))
+      return false;
+    return (get_active_reference_layer(context) != nullptr);
+  }
+
+  bool onChecked(Context* context) override
+  {
+    Layer* layer = get_active_reference_layer(context);
+    return (layer && layer->hasFlags(LayerFlags::RefPaletteColors));
+  }
+
+  void onExecute(Context* context) override
+  {
+    ContextWriter writer(context);
+    Layer* layer = writer.layer();
+    if (!layer || !layer->isReference())
+      return;
+
+    LayerFlags flags = layer->flags();
+    if (layer->hasFlags(LayerFlags::RefPaletteColors))
+      flags = LayerFlags(int(flags) & ~int(LayerFlags::RefPaletteColors));
+    else
+      flags = LayerFlags(int(flags) | int(LayerFlags::RefPaletteColors));
+
+    Tx tx(writer, friendlyName());
+    tx(new cmd::SetLayerFlags(layer, flags));
+    tx.commit();
+
+    update_screen_for_document(writer.document());
+  }
+};
+
+Command* CommandFactory::createReferencePaletteColorsCommand()
+{
+  return new ReferencePaletteColorsCommand;
 }
 
 } // namespace app

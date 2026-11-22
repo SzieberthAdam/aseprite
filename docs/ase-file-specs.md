@@ -171,6 +171,8 @@ entire layers layout:
                   16 = Prefer linked cels
                   32 = The layer group should be displayed collapsed
                   64 = The layer is a reference layer
+                  128 = Show the reference layer with the colors of the
+                        sprite palette (reference-transform fork)
     WORD        Layer type
                   0 = Normal (image) layer
                   1 = Group
@@ -524,6 +526,24 @@ The data of this chunk is as follows:
       DWORD     Data length of the compressed Tileset image
       PIXEL[]   Compressed Tileset image (see NOTE.3):
                   (Tile Width) x (Tile Height x Number of Tiles)
+
+### Reference Image Chunk (0x2F00)
+
+An extension of the reference-transform fork.
+It follows the Cel Chunk (and its Cel Extra Chunk) of a reference layer whose image has a different color mode than the sprite.
+The Cel Chunk contains the image converted to the color mode of the sprite, so other readers can skip this chunk and still show the reference layer.
+Readers that know this chunk replace the image of the latest read cel with this one, keeping its precise bounds and perspective quad.
+
+    DWORD       Flags (set to zero)
+    WORD        Color depth of the image (bits per pixel)
+                  32 bpp = RGBA
+                  16 bpp = Grayscale
+    WORD        Reserved (set to zero)
+    DWORD       Width in pixels
+    DWORD       Height in pixels
+    BYTE[16]    For future use (set to zero)
+    PIXEL[]     Compressed image (see NOTE.3) in the given color depth:
+                  Width x Height
 
 ## Notes
 

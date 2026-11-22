@@ -170,7 +170,8 @@ private:
                        const gfx::Clip& area,
                        CompositeImageFunc compositeImage,
                        const int opacity,
-                       const BlendMode blendMode);
+                       const BlendMode blendMode,
+                       const frame_t paletteFrame = -1);
 
   void renderImage(Image* dst_image,
                    const Image* cel_image,

@@ -497,9 +497,27 @@ void Clipboard::paste(Context* ctx, const bool interactive, const gfx::Point* po
 
       Palette* dst_palette = dstSpr->palette(site.frame());
 
+      // Reference layers keep the color mode of the clipboard image
+      // (indexed images are converted to RGB) only for non-interactive
+      // pastes, e.g. "New Reference Layer from Clipboard".
+      const bool toReference = (!interactive && site.layer() && site.layer()->isReference());
+
       // Source image (clipboard or a converted copy to the destination 'imgtype')
       ImageRef src_image;
-      if ( // Copy image of the same pixel format
+      if (toReference) {
+        if (m_data->image->pixelFormat() != IMAGE_INDEXED)
+          src_image = m_data->image;
+        else
+          src_image.reset(render::convert_pixel_format(m_data->image.get(),
+                                                       nullptr,
+                                                       IMAGE_RGB,
+                                                       render::Dithering(),
+                                                       nullptr,
+                                                       m_data->palette.get(),
+                                                       false,
+                                                       0));
+      }
+      else if ( // Copy image of the same pixel format
         (m_data->image->pixelFormat() == dstSpr->pixelFormat() &&
          // Indexed images can be copied directly only if both images
          // have the same palette.
@@ -540,7 +558,7 @@ void Clipboard::paste(Context* ctx, const bool interactive, const gfx::Point* po
         Layer* dstLayer = site.layer();
         ASSERT(dstLayer);
         if (!dstLayer || !dstLayer->isImage() ||
-            (src_image->pixelFormat() != dstSpr->pixelFormat()))
+            (!toReference && src_image->pixelFormat() != dstSpr->pixelFormat()))
           return;
 
         ImageRef result;
@@ -549,7 +567,12 @@ void Clipboard::paste(Context* ctx, const bool interactive, const gfx::Point* po
         gfx::Rect resultBounds = gfx::Rect(
           position ? *position : (m_data->mask ? m_data->mask->origin() : gfx::Point()),
           src_image->size());
-        const bool isAnImageOnDstCel = ctx->activeSite().cel() && ctx->activeSite().cel()->image();
+        // Pasting into a reference layer replaces its image (no blend,
+        // the reference image can be in other color mode than the
+        // sprite).
+        const bool replaceRefCel = (toReference && ctx->activeSite().cel());
+        const bool isAnImageOnDstCel = !replaceRefCel && ctx->activeSite().cel() &&
+                                       ctx->activeSite().cel()->image();
         ASSERT(!ctx->activeSite().cel() || ctx->activeSite().cel()->image());
         if (isAnImageOnDstCel) {
           Cel* cel = ctx->activeSite().cel();
@@ -578,8 +601,11 @@ void Clipboard::paste(Context* ctx, const bool interactive, const gfx::Point* po
         Cel* dstCel;
         if (isAnImageOnDstCel)
           api.clearCel(ctx->activeSite().cel());
-        else
+        else {
+          if (replaceRefCel)
+            api.clearCel(ctx->activeSite().cel());
           result.reset(Image::createCopy(src_image.get()));
+        }
 
         // Calculate the active image + pasted image bounds
         const gfx::Rect startBounds(gfx::Point(), result->size());

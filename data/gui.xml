@@ -929,6 +929,8 @@
         <item command="MergeDownLayer" text="@.layer_merge_down" />
         <item command="RenderReferenceLayer" text="@.layer_render_reference_layer" />
         <item command="ResetReferenceTransform" text="@.layer_reset_reference_transform" />
+        <item command="ReferencePaletteColors" text="@.layer_reference_palette_colors" />
+        <item command="PaletteFromReference" text="@.layer_palette_from_reference" />
         <item command="FlattenLayers" text="@.layer_flatten" />
         <item command="FlattenLayers" text="@.layer_flatten_visible" group="layer_merge">
           <param name="visibleOnly" value="true" />

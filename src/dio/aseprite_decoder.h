@@ -61,6 +61,9 @@ private:
                          const AsepriteHeader* header,
                          const size_t chunk_end);
   void readCelExtraChunk(doc::Cel* cel);
+  void readReferenceImageChunk(doc::Cel* cel,
+                                  const AsepriteHeader* header,
+                                  const size_t chunk_end);
   void readColorProfile(doc::Sprite* sprite);
   void readExternalFiles(AsepriteExternalFiles& extFiles);
   doc::Mask* readMaskChunk();

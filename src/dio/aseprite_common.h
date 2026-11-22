@@ -37,6 +37,10 @@
   0x2021 // Deprecated chunk (used on dev versions only between v1.2-beta7 and v1.2-beta8)
 #define ASE_FILE_CHUNK_SLICE              0x2022
 #define ASE_FILE_CHUNK_TILESET            0x2023
+// Extension of this fork: original image of a reference cel with a
+// different color mode than the sprite (the cel chunk contains a
+// version converted to the sprite color mode)
+#define ASE_FILE_CHUNK_REFERENCE_IMAGE 0x2F00
 
 #define ASE_FILE_LAYER_IMAGE              0
 #define ASE_FILE_LAYER_GROUP              1
