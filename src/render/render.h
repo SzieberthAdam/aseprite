@@ -162,6 +162,16 @@ private:
                  const int opacity,
                  const BlendMode blendMode);
 
+  // Renders a reference cel image mapped to a perspective quad.
+  void renderQuadImage(Image* dst_image,
+                       const Image* cel_image,
+                       const Palette* pal,
+                       const doc::Quad& quad,
+                       const gfx::Clip& area,
+                       CompositeImageFunc compositeImage,
+                       const int opacity,
+                       const BlendMode blendMode);
+
   void renderImage(Image* dst_image,
                    const Image* cel_image,
                    const Palette* pal,

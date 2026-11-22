@@ -34,6 +34,7 @@ CelData::CelData(const CelData& celData)
   , m_opacity(celData.m_opacity)
   , m_bounds(celData.m_bounds)
   , m_boundsF(celData.m_boundsF ? std::make_unique<gfx::RectF>(*celData.m_boundsF) : nullptr)
+  , m_quad(celData.m_quad ? std::make_unique<Quad>(*celData.m_quad) : nullptr)
 {
   setUserData(celData.userData());
 }
@@ -50,9 +51,11 @@ void CelData::setImage(const ImageRef& image, Layer* layer)
 
 void CelData::setPosition(const gfx::Point& pos)
 {
+  const gfx::RectF oldBounds = (m_quad ? boundsF() : gfx::RectF());
   m_bounds.setOrigin(pos);
   if (m_boundsF)
     m_boundsF->setOrigin(gfx::PointF(pos));
+  remapQuad(oldBounds);
 }
 
 void CelData::setBounds(const gfx::Rect& bounds)
@@ -63,13 +66,16 @@ void CelData::setBounds(const gfx::Rect& bounds)
     ASSERT(bounds.h > 0);
   }
 #endif
+  const gfx::RectF oldBounds = (m_quad ? boundsF() : gfx::RectF());
   m_bounds = bounds;
   if (m_boundsF)
     *m_boundsF = gfx::RectF(bounds);
+  remapQuad(oldBounds);
 }
 
 void CelData::setBoundsF(const gfx::RectF& boundsF)
 {
+  const gfx::RectF oldBounds = (m_quad ? this->boundsF() : gfx::RectF());
   if (m_boundsF)
     *m_boundsF = boundsF;
   else
@@ -80,6 +86,25 @@ void CelData::setBoundsF(const gfx::RectF& boundsF)
     m_bounds.w = 1;
   if (m_bounds.h <= 0)
     m_bounds.h = 1;
+  remapQuad(oldBounds);
+}
+
+void CelData::setQuad(const Quad& quad)
+{
+  // Set the bounding box first (without remapping the old quad).
+  m_quad.reset();
+  setBoundsF(quad.bounds());
+  m_quad = std::make_unique<Quad>(quad);
+}
+
+void CelData::remapQuad(const gfx::RectF& oldBounds)
+{
+  if (!m_quad)
+    return;
+  const gfx::RectF newBounds = boundsF();
+  if (oldBounds == newBounds)
+    return;
+  *m_quad = m_quad->mapRect(oldBounds, newBounds);
 }
 
 void CelData::suspendObject()

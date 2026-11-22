@@ -752,13 +752,25 @@ void AsepriteEncoder::writeCelExtraChunk(AsepriteFrameHeader* frame_header, cons
   ASSERT(cel->layer()->isReference());
 
   const gfx::RectF& bounds = cel->boundsF();
+  const bool hasQuad = cel->data()->hasQuad();
 
-  write32(ASE_CEL_EXTRA_FLAG_PRECISE_BOUNDS);
+  write32(ASE_CEL_EXTRA_FLAG_PRECISE_BOUNDS | (hasQuad ? ASE_CEL_EXTRA_FLAG_QUAD : 0));
   write32(fixmath::ftofix(bounds.x));
   write32(fixmath::ftofix(bounds.y));
   write32(fixmath::ftofix(bounds.w));
   write32(fixmath::ftofix(bounds.h));
   writePadding(16);
+
+  // Perspective quad (extension of this fork): 4 corners as FIXED x/y
+  // pairs after the reserved bytes. Other readers ignore it and use the
+  // precise bounds (the bounding box of the quad).
+  if (hasQuad) {
+    const doc::Quad quad = cel->data()->quad();
+    for (int i = 0; i < 4; ++i) {
+      write32(fixmath::ftofix(quad[i].x));
+      write32(fixmath::ftofix(quad[i].y));
+    }
+  }
 }
 
 void AsepriteEncoder::writeColorProfile(AsepriteFrameHeader* frame_header, const Sprite* sprite)

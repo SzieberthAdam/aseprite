@@ -11,6 +11,7 @@
 
 #include "app/app.h"
 #include "app/cmd/set_cel_bounds.h"
+#include "app/cmd/set_cel_quad.h"
 #include "app/commands/cmd_rotate.h"
 #include "app/commands/params.h"
 #include "app/doc_api.h"
@@ -88,7 +89,46 @@ protected:
       if (!image)
         continue;
 
-      if (cel->layer()->isReference()) {
+      if (cel->layer()->isReference() && cel->data()->hasQuad()) {
+        // Rotate the perspective quad corners (the image is rotated
+        // too, so the corners are reordered).
+        const doc::Quad q = cel->data()->quad();
+        const double W = sprite()->width();
+        const double H = sprite()->height();
+        auto rot = [this, W, H](const gfx::PointF& p) {
+          switch (m_angle) {
+            case 180: return gfx::PointF(W - p.x, H - p.y);
+            case 90:  return gfx::PointF(H - p.y, p.x);
+            case -90: return gfx::PointF(p.y, W - p.x);
+          }
+          return p;
+        };
+        // Index of the old corner that becomes each new corner
+        int order[4] = { 0, 1, 2, 3 };
+        if (m_angle == 180) {
+          order[0] = 2;
+          order[1] = 3;
+          order[2] = 0;
+          order[3] = 1;
+        }
+        else if (m_angle == 90) {
+          order[0] = 3;
+          order[1] = 0;
+          order[2] = 1;
+          order[3] = 2;
+        }
+        else if (m_angle == -90) {
+          order[0] = 1;
+          order[1] = 2;
+          order[2] = 3;
+          order[3] = 0;
+        }
+        doc::Quad nq;
+        for (int i = 0; i < 4; ++i)
+          nq[i] = rot(q[order[i]]);
+        tx(new cmd::SetCelQuad(cel, nq));
+      }
+      else if (cel->layer()->isReference()) {
         gfx::RectF bounds = cel->boundsF();
         rotate_rect(bounds);
         if (cel->boundsF() != bounds)

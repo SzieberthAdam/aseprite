@@ -18,6 +18,8 @@
 #include "doc/image.h"
 #include "doc/layer_tilemap.h"
 #include "doc/playback.h"
+#include "doc/primitives_fast.h"
+#include "doc/quad.h"
 #include "doc/render_plan.h"
 #include "doc/tileset.h"
 #include "doc/tilesets.h"
@@ -31,6 +33,41 @@
 namespace render {
 
 namespace {
+
+// Fills "dst" (whose pixel (0,0) is at (originX, originY) in projected
+// canvas coordinates) with the pixels of "src" mapped through the
+// inverse homography "inv" (projected canvas -> src image pixels).
+// Pixels outside the source image are left untouched.
+template<class Traits>
+void sample_quad_image(Image* dst,
+                       const Image* src,
+                       const doc::Homography& inv,
+                       const double originX,
+                       const double originY)
+{
+  const int sw = src->width();
+  const int sh = src->height();
+  const double* m = inv.m;
+  for (int y = 0; y < dst->height(); ++y) {
+    auto* d = (typename Traits::address_t)dst->getPixelAddress(0, y);
+    const double py = originY + y + 0.5;
+    const double px = originX + 0.5;
+    double U = m[0] * px + m[1] * py + m[2];
+    double V = m[3] * px + m[4] * py + m[5];
+    double W = m[6] * px + m[7] * py + m[8];
+    for (int x = 0; x < dst->width(); ++x, ++d) {
+      if (W > 1e-12) {
+        const double u = U / W;
+        const double v = V / W;
+        if (u >= 0.0 && v >= 0.0 && u < sw && v < sh)
+          *d = get_pixel_fast<Traits>(src, int(u), int(v));
+      }
+      U += m[0];
+      V += m[3];
+      W += m[6];
+    }
+  }
+}
 
 //////////////////////////////////////////////////////////////////////
 // Scaled composite
@@ -1319,9 +1356,85 @@ void Render::renderCel(Image* dst_image,
       }
     }
   }
+  else if (cel && cel->layer() && cel->layer()->isReference() && cel->data()->hasQuad()) {
+    renderQuadImage(dst_image,
+                    cel_image,
+                    pal,
+                    cel->data()->quad(),
+                    area,
+                    compositeImage,
+                    opacity,
+                    blendMode);
+  }
   else {
     renderImage(dst_image, cel_image, pal, celBounds, area, compositeImage, opacity, blendMode);
   }
+}
+
+void Render::renderQuadImage(Image* dst_image,
+                             const Image* cel_image,
+                             const Palette* pal,
+                             const doc::Quad& quad,
+                             const gfx::Clip& area,
+                             CompositeImageFunc compositeImage,
+                             const int opacity,
+                             const BlendMode blendMode)
+{
+  if (!quad.isConvex() || cel_image->width() < 1 || cel_image->height() < 1)
+    return;
+
+  // Quad in projected (zoomed) canvas coordinates.
+  doc::Quad q;
+  for (int i = 0; i < 4; ++i) {
+    q[i].x = quad[i].x * m_proj.scaleX();
+    q[i].y = quad[i].y * m_proj.scaleY();
+  }
+
+  const gfx::RectF qb = q.bounds();
+  gfx::Rect rc(int(std::floor(qb.x)),
+               int(std::floor(qb.y)),
+               int(std::ceil(qb.x2())) - int(std::floor(qb.x)),
+               int(std::ceil(qb.y2())) - int(std::floor(qb.y)));
+  rc &= area.srcBounds();
+  if (rc.isEmpty())
+    return;
+
+  const doc::Homography inv =
+    doc::Homography::imageToQuad(q, cel_image->width(), cel_image->height()).inverted(q.center());
+
+  ImageRef tmp(Image::create(cel_image->pixelFormat(), rc.w, rc.h));
+  if (!tmp)
+    return;
+  tmp->clear(cel_image->maskColor());
+
+  switch (cel_image->pixelFormat()) {
+    case IMAGE_RGB:
+      sample_quad_image<RgbTraits>(tmp.get(), cel_image, inv, rc.x, rc.y);
+      break;
+    case IMAGE_GRAYSCALE:
+      sample_quad_image<GrayscaleTraits>(tmp.get(), cel_image, inv, rc.x, rc.y);
+      break;
+    case IMAGE_INDEXED:
+      sample_quad_image<IndexedTraits>(tmp.get(), cel_image, inv, rc.x, rc.y);
+      break;
+    default: return;
+  }
+
+  compositeImage(dst_image,
+                 tmp.get(),
+                 pal,
+                 gfx::ClipF(double(area.dst.x + rc.x - area.src.x),
+                            double(area.dst.y + rc.y - area.src.y),
+                            0.0,
+                            0.0,
+                            double(rc.w),
+                            double(rc.h)),
+                 opacity,
+                 blendMode,
+                 1.0,
+                 1.0,
+                 m_newBlendMethod,
+                 0);
 }
 
 void Render::renderImage(Image* dst_image,

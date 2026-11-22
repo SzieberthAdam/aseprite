@@ -1020,6 +1020,15 @@ void AsepriteDecoder::readCelExtraChunk(Cel* cel)
       cel->setBoundsF(bounds);
     }
   }
+  if (flags & ASE_CEL_EXTRA_FLAG_QUAD) {
+    readPadding(16);
+    doc::Quad quad;
+    for (int i = 0; i < 4; ++i) {
+      quad[i].x = fixmath::fixtof(read32());
+      quad[i].y = fixmath::fixtof(read32());
+    }
+    cel->data()->setQuad(quad);
+  }
 }
 
 void AsepriteDecoder::readColorProfile(Sprite* sprite)

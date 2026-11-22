@@ -483,6 +483,8 @@ Cel* create_cel_copy(CmdSequence* cmds,
   else if (!dstLayer->isTilemap()) {
     if (srcCel->layer() && srcCel->layer()->isReference()) {
       dstCel->setBoundsF(srcCel->boundsF());
+      if (srcCel->data()->hasQuad() && dstLayer->isReference())
+        dstCel->data()->setQuad(srcCel->data()->quad());
     }
     else {
       dstCel->setPosition(srcCel->position());

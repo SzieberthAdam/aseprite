@@ -690,6 +690,15 @@ void Sprite::pickCels(const gfx::PointF& pos,
       if (!get_tile_pixel(cel, pos, ti, tf, color))
         continue;
     }
+    else if (cel->layer()->isReference() && cel->data()->hasQuad()) {
+      gfx::PointF ipt;
+      if (!quad_point_to_image(cel->data()->quad(), image->width(), image->height(), pos, ipt))
+        continue;
+      const gfx::Point ipos(int(ipt.x), int(ipt.y));
+      if (!image->bounds().contains(ipos))
+        continue;
+      color = get_pixel(image, ipos.x, ipos.y);
+    }
     else {
       gfx::Point ipos(int((pos.x - celBounds.x) * image->width() / celBounds.w),
                       int((pos.y - celBounds.y) * image->height() / celBounds.h));

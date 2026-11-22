@@ -253,11 +253,16 @@ Adds extra information to the latest read cel.
 
     DWORD       Flags (set to zero)
                   1 = Precise bounds are set
+                  2 = Perspective quad is set (reference-transform fork)
     FIXED       Precise X position
     FIXED       Precise Y position
     FIXED       Width of the cel in the sprite (scaled in real-time)
     FIXED       Height of the cel in the sprite
     BYTE[16]    For future use (set to zero)
+    + If flags have bit 2
+      FIXED[8]  Sprite coordinates (x, y) of the four image corners:
+                top-left, top-right, bottom-right, bottom-left. The
+                precise bounds are the bounding box of these corners.
 
 ### Color Profile Chunk (0x2007)
 

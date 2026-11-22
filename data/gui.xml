@@ -927,6 +927,8 @@
         <separator />
         <item command="DuplicateLayer" text="@.layer_duplicate" group="layer_duplicate" />
         <item command="MergeDownLayer" text="@.layer_merge_down" />
+        <item command="RenderReferenceLayer" text="@.layer_render_reference_layer" />
+        <item command="ResetReferenceTransform" text="@.layer_reset_reference_transform" />
         <item command="FlattenLayers" text="@.layer_flatten" />
         <item command="FlattenLayers" text="@.layer_flatten_visible" group="layer_merge">
           <param name="visibleOnly" value="true" />

@@ -11,6 +11,7 @@
 
 #include "doc/image_ref.h"
 #include "doc/object.h"
+#include "doc/quad.h"
 #include "doc/with_user_data.h"
 #include "gfx/rect.h"
 
@@ -66,6 +67,16 @@ public:
 
   bool hasBoundsF() const { return m_boundsF != nullptr; }
 
+  // Optional perspective quad for reference layer cels (sprite
+  // coordinates of the image corners: top-left, top-right,
+  // bottom-right, bottom-left). When it exists, boundsF() is the
+  // bounding box of the quad, and moving/scaling the bounds moves and
+  // scales the quad too.
+  bool hasQuad() const { return m_quad != nullptr; }
+  Quad quad() const { return m_quad ? *m_quad : Quad(boundsF()); }
+  void setQuad(const Quad& quad);
+  void removeQuad() { m_quad.reset(); }
+
   int getMemSize() const override
   {
     return sizeof(CelData) + (m_image ? m_image->getMemSize() : 0);
@@ -98,6 +109,11 @@ private:
   // Special bounds for reference layers that can have subpixel
   // position.
   mutable std::unique_ptr<gfx::RectF> m_boundsF;
+
+  // Perspective quad for reference layers (see quad()).
+  std::unique_ptr<Quad> m_quad;
+
+  void remapQuad(const gfx::RectF& oldBounds);
 };
 
 using CelDataRef = std::shared_ptr<CelData>;

@@ -11,15 +11,18 @@
 
 #include "app/cmd/remove_cel.h"
 #include "app/cmd/replace_image.h"
+#include "app/cmd/set_cel_quad.h"
 #include "app/cmd/set_cel_opacity.h"
 #include "app/cmd/set_cel_position.h"
 #include "app/cmd/set_cel_zindex.h"
 #include "app/doc_api.h"
+#include "app/tx.h"
 #include "app/script/docobj.h"
 #include "app/script/engine.h"
 #include "app/script/luacpp.h"
 #include "app/script/userdata.h"
 #include "doc/cel.h"
+#include "doc/layer.h"
 #include "doc/sprite.h"
 
 namespace app { namespace script {
@@ -86,6 +89,78 @@ int Cel_get_bounds(lua_State* L)
   const auto cel = get_docobj<Cel>(L, 1);
   push_new<gfx::Rect>(L, cel->bounds());
   return 1;
+}
+
+// Precise bounds of reference layer cels (a table {x,y,width,height}
+// with fractional numbers).
+int Cel_get_boundsF(lua_State* L)
+{
+  const auto cel = get_docobj<Cel>(L, 1);
+  const gfx::RectF b = cel->boundsF();
+  lua_newtable(L);
+  lua_pushnumber(L, b.x);
+  lua_setfield(L, -2, "x");
+  lua_pushnumber(L, b.y);
+  lua_setfield(L, -2, "y");
+  lua_pushnumber(L, b.w);
+  lua_setfield(L, -2, "width");
+  lua_pushnumber(L, b.h);
+  lua_setfield(L, -2, "height");
+  return 1;
+}
+
+// Perspective quad of a reference layer cel: an array of 4 tables
+// {x=..., y=...} (top-left, top-right, bottom-right, bottom-left image
+// corners in sprite coordinates), or nil if the cel doesn't have one.
+int Cel_get_quad(lua_State* L)
+{
+  const auto cel = get_docobj<Cel>(L, 1);
+  if (!cel->data()->hasQuad()) {
+    lua_pushnil(L);
+    return 1;
+  }
+  const doc::Quad q = cel->data()->quad();
+  lua_newtable(L);
+  for (int i = 0; i < 4; ++i) {
+    lua_newtable(L);
+    lua_pushnumber(L, q[i].x);
+    lua_setfield(L, -2, "x");
+    lua_pushnumber(L, q[i].y);
+    lua_setfield(L, -2, "y");
+    lua_rawseti(L, -2, i + 1);
+  }
+  return 1;
+}
+
+int Cel_set_quad(lua_State* L)
+{
+  const auto cel = get_docobj<Cel>(L, 1);
+  if (!cel->layer() || !cel->layer()->isReference())
+    return luaL_error(L, "only reference layer cels can have a perspective quad");
+
+  Tx tx(cel->sprite());
+  if (lua_isnil(L, 2)) {
+    tx(new cmd::SetCelQuad(cel, cel->boundsF()));
+  }
+  else {
+    luaL_checktype(L, 2, LUA_TTABLE);
+    doc::Quad q;
+    for (int i = 0; i < 4; ++i) {
+      if (lua_geti(L, 2, i + 1) == LUA_TNIL)
+        return luaL_error(L, "the quad must have 4 points");
+      lua_getfield(L, -1, "x");
+      q[i].x = lua_tonumber(L, -1);
+      lua_pop(L, 1);
+      lua_getfield(L, -1, "y");
+      q[i].y = lua_tonumber(L, -1);
+      lua_pop(L, 2);
+    }
+    if (!q.isConvex())
+      return luaL_error(L, "the quad must be convex");
+    tx(new cmd::SetCelQuad(cel, q));
+  }
+  tx.commit();
+  return 0;
 }
 
 int Cel_get_opacity(lua_State* L)
@@ -173,6 +248,8 @@ const Property Cel_properties[] = {
   { "frameNumber", Cel_get_frameNumber,          Cel_set_frame                },
   { "image",       Cel_get_image,                Cel_set_image                },
   { "bounds",      Cel_get_bounds,               nullptr                      },
+  { "boundsF",     Cel_get_boundsF,              nullptr                      },
+  { "quad",        Cel_get_quad,                 Cel_set_quad                 },
   { "position",    Cel_get_position,             Cel_set_position             },
   { "opacity",     Cel_get_opacity,              Cel_set_opacity              },
   { "zIndex",      Cel_get_zIndex,               Cel_set_zIndex               },

@@ -60,6 +60,17 @@ bool get_cel_pixel(const Cel* cel,
     doc::tile_flags tf;
     return get_tile_pixel(cel, pos, ti, tf, output);
   }
+  // Reference cels with a perspective quad
+  else if (cel->layer()->isReference() && cel->data()->hasQuad()) {
+    gfx::PointF ipt;
+    if (!doc::quad_point_to_image(cel->data()->quad(), image->width(), image->height(), pos, ipt))
+      return false;
+    const gfx::Point ipos(int(ipt.x), int(ipt.y));
+    if (!image->bounds().contains(ipos))
+      return false;
+    output = get_pixel(image, ipos.x, ipos.y);
+    return true;
+  }
   // Regular images
   else {
     pos.x = (pos.x - celBounds.x) * image->width() / celBounds.w;

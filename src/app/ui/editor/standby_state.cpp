@@ -34,6 +34,8 @@
 #include "app/ui/editor/glue.h"
 #include "app/ui/editor/handle_type.h"
 #include "app/ui/editor/moving_cel_state.h"
+#include "app/ui/editor/ref_cel_handles.h"
+#include "app/ui/editor/transforming_ref_cel_state.h"
 #include "app/ui/editor/moving_pixels_state.h"
 #include "app/ui/editor/moving_selection_state.h"
 #include "app/ui/editor/moving_slice_state.h"
@@ -156,6 +158,22 @@ bool StandbyState::onMouseDown(Editor* editor, MouseMessage* msg)
 
   // Move cel X,Y coordinates
   if (clickedInk->isCelMovement()) {
+    // Transform handles of reference layers (rotate/perspective/stretch)
+    if (Cel* refCel = get_transformable_ref_cel(editor)) {
+      const RefCelHit hit = hit_test_ref_cel(editor, refCel, msg->position());
+      if (hit.type != RefCelHit::None) {
+        try {
+          editor->setState(
+            EditorStatePtr(new TransformingRefCelState(editor, msg, refCel, hit)));
+        }
+        catch (const LockedDocException&) {
+          StatusBar::instance()->showTip(1000,
+                                         Strings::statusbar_tips_recovery_task_using_sprite());
+        }
+        return true;
+      }
+    }
+
     // Handle "Auto Select Layer"
     if (editor->isAutoSelectLayer()) {
       gfx::PointF cursor = editor->screenToEditorF(msg->position());
@@ -427,6 +445,10 @@ bool StandbyState::onSetCursor(Editor* editor, const gfx::Point& mouseScreenPos)
       return true;
     }
     else if (ink->isCelMovement()) {
+      if (Cel* refCel = get_transformable_ref_cel(editor)) {
+        if (set_ref_cel_cursor(editor, refCel, hit_test_ref_cel(editor, refCel, mouseScreenPos)))
+          return true;
+      }
       if (resizeCelBounds(editor).contains(mouseScreenPos))
         editor->showMouseCursor(kSizeSECursor);
       else
@@ -811,6 +833,11 @@ void StandbyState::onPivotChange(Editor* editor)
 gfx::Rect StandbyState::resizeCelBounds(Editor* editor) const
 {
   gfx::Rect bounds;
+  // Reference layers edited with the on-canvas handles don't use this
+  // invisible resize zone.
+  if (get_transformable_ref_cel(editor))
+    return bounds;
+
   Cel* refCel = (editor->layer() && editor->layer()->isReference() ?
                    editor->layer()->cel(editor->frame()) :
                    nullptr);
@@ -1008,6 +1035,10 @@ void StandbyState::Decorator::postRenderDecorator(EditorPostRender* render)
     }
   }
 
+  // Draw the handles to transform the active reference layer
+  if (Cel* refCel = get_transformable_ref_cel(editor))
+    draw_ref_cel_handles(editor, render->getGraphics(), refCel);
+
   // Draw transformation handles (if the mask is visible and isn't frozen).
   Handles handles;
   if (StandbyState::Decorator::getSymmetryHandles(editor, handles)) {
@@ -1021,6 +1052,9 @@ void StandbyState::Decorator::postRenderDecorator(EditorPostRender* render)
 
 void StandbyState::Decorator::getInvalidDecoratoredRegion(Editor* editor, gfx::Region& region)
 {
+  if (Cel* refCel = get_transformable_ref_cel(editor))
+    region.createUnion(region, gfx::Region(get_ref_cel_handles_bounds(editor, refCel)));
+
   Handles handles;
   if (getSymmetryHandles(editor, handles)) {
     for (const auto& handle : handles)

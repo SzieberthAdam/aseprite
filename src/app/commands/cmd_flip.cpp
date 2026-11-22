@@ -15,6 +15,7 @@
 #include "app/cmd/flip_mask.h"
 #include "app/cmd/flip_masked_cel.h"
 #include "app/cmd/set_cel_bounds.h"
+#include "app/cmd/set_cel_quad.h"
 #include "app/cmd/set_mask_position.h"
 #include "app/cmd/trim_cel.h"
 #include "app/commands/params.h"
@@ -162,8 +163,36 @@ void FlipCommand::onExecute(Context* ctx)
     for (Cel* cel : cels) {
       Image* image = cel->image();
 
+      // Flip reference layer cel with a perspective quad: mirror the
+      // corners (the image itself is flipped too, so the corners are
+      // reordered to keep the mirrored appearance).
+      if (cel->layer()->isReference() && cel->data()->hasQuad()) {
+        const doc::Quad q = cel->data()->quad();
+        doc::Quad m;
+        for (int i = 0; i < 4; ++i) {
+          m[i] = q[i];
+          if (m_flipType == doc::algorithm::FlipHorizontal)
+            m[i].x = sprite->width() - q[i].x;
+          else
+            m[i].y = sprite->height() - q[i].y;
+        }
+        doc::Quad nq;
+        if (m_flipType == doc::algorithm::FlipHorizontal) {
+          nq[0] = m[1];
+          nq[1] = m[0];
+          nq[2] = m[3];
+          nq[3] = m[2];
+        }
+        else {
+          nq[0] = m[3];
+          nq[1] = m[2];
+          nq[2] = m[1];
+          nq[3] = m[0];
+        }
+        tx(new cmd::SetCelQuad(cel, nq));
+      }
       // Flip reference layer cel
-      if (cel->layer()->isReference()) {
+      else if (cel->layer()->isReference()) {
         gfx::RectF bounds = cel->boundsF();
 
         if (m_flipType == doc::algorithm::FlipHorizontal)

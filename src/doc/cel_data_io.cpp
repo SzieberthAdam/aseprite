@@ -23,6 +23,7 @@
 namespace doc {
 
 #define HAS_BOUNDS_F 1
+#define HAS_QUAD     2
 
 using namespace base::serialization;
 using namespace base::serialization::little_endian;
@@ -39,11 +40,18 @@ void write_celdata(std::ostream& os, const CelData* celdata)
   write_user_data(os, celdata->userData());
 
   if (celdata->hasBoundsF()) { // Reference layer
-    write32(os, HAS_BOUNDS_F);
+    write32(os, HAS_BOUNDS_F | (celdata->hasQuad() ? HAS_QUAD : 0));
     write32(os, fixmath::ftofix(celdata->boundsF().x));
     write32(os, fixmath::ftofix(celdata->boundsF().y));
     write32(os, fixmath::ftofix(celdata->boundsF().w));
     write32(os, fixmath::ftofix(celdata->boundsF().h));
+    if (celdata->hasQuad()) {
+      const Quad quad = celdata->quad();
+      for (int i = 0; i < 4; ++i) {
+        write32(os, fixmath::ftofix(quad[i].x));
+        write32(os, fixmath::ftofix(quad[i].y));
+      }
+    }
   }
   else {
     write32(os, 0);
@@ -64,6 +72,8 @@ CelData* read_celdata(std::istream& is,
   ObjectId imageId = read32(is);
   const UserData userData = read_user_data(is, serial);
   gfx::RectF boundsF;
+  Quad quad;
+  bool hasQuad = false;
 
   // Extra fields
   int flags = read32(is);
@@ -75,6 +85,13 @@ CelData* read_celdata(std::istream& is,
     if (w && h) {
       boundsF =
         gfx::RectF(fixmath::fixtof(x), fixmath::fixtof(y), fixmath::fixtof(w), fixmath::fixtof(h));
+    }
+    if (flags & HAS_QUAD) {
+      for (int i = 0; i < 4; ++i) {
+        quad[i].x = fixmath::fixtof(read32(is));
+        quad[i].y = fixmath::fixtof(read32(is));
+      }
+      hasQuad = true;
     }
   }
 
@@ -93,6 +110,8 @@ CelData* read_celdata(std::istream& is,
     celdata->setId(id);
   if (!boundsF.isEmpty())
     celdata->setBoundsF(boundsF);
+  if (hasQuad)
+    celdata->setQuad(quad);
   return celdata.release();
 }
 

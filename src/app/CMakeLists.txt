@@ -318,6 +318,7 @@ target_sources(app-lib PRIVATE
   cmd/replace_tileset.cpp
   cmd/reselect_mask.cpp
   cmd/set_cel_bounds.cpp
+  cmd/set_cel_quad.cpp
   cmd/set_cel_data.cpp
   cmd/set_cel_frame.cpp
   cmd/set_cel_image.cpp
@@ -462,6 +463,7 @@ target_sources(app-lib PRIVATE
   commands/cmd_remove_frame.cpp
   commands/cmd_remove_frame_tag.cpp
   commands/cmd_remove_layer.cpp
+  commands/cmd_reference_layer.cpp
   commands/cmd_remove_slice.cpp
   commands/cmd_reopen_closed_file.cpp
   commands/cmd_repeat_last_export.cpp
@@ -634,6 +636,7 @@ target_sources(app-lib PRIVATE
   ui/editor/editor_states_history.cpp
   ui/editor/editor_view.cpp
   ui/editor/moving_cel_state.cpp
+  ui/editor/ref_cel_handles.cpp
   ui/editor/moving_pixels_state.cpp
   ui/editor/moving_selection_state.cpp
   ui/editor/moving_slice_state.cpp
@@ -646,6 +649,7 @@ target_sources(app-lib PRIVATE
   ui/editor/select_box_state.cpp
   ui/editor/select_text_box_state.cpp
   ui/editor/standby_state.cpp
+  ui/editor/transforming_ref_cel_state.cpp
   ui/editor/state_with_wheel_behavior.cpp
   ui/editor/tool_loop_impl.cpp
   ui/editor/transform_handles.cpp
