@@ -44,7 +44,9 @@ struct ClusterOptions {
   ClusterAverage average = ClusterAverage::Rgb;
   // Bits per channel used to merge similar colors before the
   // clustering (8 = every different color is a point, as imgclust).
-  int precision = 8;
+  // The colors of the clusters are always averaged from the original
+  // pixels, so 6 bits gives the same palette quality much faster.
+  int precision = 6;
   int maxRounds = 100;
 };
 
