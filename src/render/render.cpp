@@ -1363,7 +1363,12 @@ void Render::renderCel(Image* dst_image,
     // indexed/grayscale (to keep the original colors of the photo).
     CompositeImageFunc refComposite = compositeImage;
     if (!m_sprite || cel_image->pixelFormat() != m_sprite->pixelFormat()) {
-      refComposite = getImageComposition(dst_image->pixelFormat(), cel_image->pixelFormat(), nullptr);
+      // The parent group (with a visible reference layer) forces the
+      // general composite function, which scales the cel image to the
+      // cel bounds.
+      refComposite = getImageComposition(dst_image->pixelFormat(),
+                                         cel_image->pixelFormat(),
+                                         cel->layer()->parent());
       if (!refComposite)
         return;
     }
@@ -1458,7 +1463,9 @@ void Render::renderQuadImage(Image* dst_image,
       }
     }
     tmp = rgbTmp;
-    compositeImage = getImageComposition(dst_image->pixelFormat(), IMAGE_RGB, nullptr);
+    compositeImage = getImageComposition(dst_image->pixelFormat(),
+                                         IMAGE_RGB,
+                                         m_sprite ? m_sprite->root() : nullptr);
     if (!compositeImage)
       return;
   }
